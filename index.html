@@ -262,6 +262,23 @@
             font-family: monospace;
         }
         
+        #statusMessage {
+            padding: 2px 4px;
+            margin-top: 4px;
+            background-color: #f5f5f5;
+            border: 1px solid #ccc;
+            font-size: 10px;
+            font-family: monospace;
+        }
+        #statusMessage.success {
+            color: #333;
+            background-color: #f0f8f0;
+        }
+        #statusMessage.error {
+            color: #333;
+            background-color: #f8f0f0;
+        }
+        
     </style>
 </head>
 <body>
@@ -275,6 +292,7 @@
         <div class="file-path-display" id="filePathDisplay">
             No working directory or file set
         </div>
+        <div id="statusMessage" style="font-size: 10px; color: #666; font-family: monospace; display: none;"></div>
     </div>
 
     <!-- Main Layout -->
@@ -322,6 +340,18 @@
         let isLinkedToFile = false;
         let currentFilePath = null;
         let lastDirectoryHandle = null;
+        
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.textContent = message;
+            statusDiv.className = type;
+            statusDiv.style.display = 'block';
+            
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 3000);
+        }
 
         async function sendRequest() {
             const apiKey = document.getElementById('apiKey').value.trim();
@@ -544,13 +574,13 @@
             const selectedText = markdownInput.value.substring(markdownInput.selectionStart, markdownInput.selectionEnd);
             
             if (!selectedText || selectedText.trim() === '') {
-                alert('Please select some text to check.');
+                showStatus('Please select some text to check.', 'error');
                 return;
             }
             
             const apiKey = document.getElementById('apiKey').value.trim();
             if (!apiKey) {
-                alert('Please enter your OpenAI API key first.');
+                showStatus('Please enter your OpenAI API key first.', 'error');
                 return;
             }
             
@@ -722,7 +752,7 @@
                     
                 } catch (error) {
                     if (error.name !== 'AbortError') {
-                        alert('Error opening file: ' + error.message);
+                        showStatus('Error opening file: ' + error.message, 'error');
                     }
                 }
             } else {
@@ -748,7 +778,7 @@
                     currentFilePath = null;
                     updateFilePathDisplay();
                 } catch (error) {
-                    alert('Error reading file: ' + error.message);
+                    showStatus('Error reading file: ' + error.message, 'error');
                 }
             }
             
@@ -775,10 +805,10 @@
                     const writable = await currentFileHandle.createWritable();
                     await writable.write(content);
                     await writable.close();
-                    alert('File saved successfully!');
+                    showStatus('File saved successfully!', 'success');
                     return; // Successfully saved to original location
                 } catch (error) {
-                    alert('Error saving to original file location: ' + error.message + '\nFalling back to Save As.');
+                    showStatus('Error saving to original file location: ' + error.message + '. Falling back to Save As.', 'error');
                     // Fall through to save-as functionality
                 }
             }
@@ -824,11 +854,11 @@
                     isLinkedToFile = true;
                     currentFilePath = fileHandle.name;
                     updateFilePathDisplay();
-                    alert('File saved as ' + fileHandle.name + ' successfully!');
+                    showStatus('File saved as ' + fileHandle.name + ' successfully!', 'success');
                     
                 } catch (error) {
                     if (error.name !== 'AbortError') {
-                        alert('Error saving file: ' + error.message);
+                        showStatus('Error saving file: ' + error.message, 'error');
                     }
                 }
             } else {
@@ -844,7 +874,7 @@
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
                 
-                alert('Your browser doesn\'t support choosing save location. File downloaded to default location.');
+                showStatus('File downloaded to default location (browser doesn\'t support save location picker).', 'success');
             }
         }
 
@@ -878,14 +908,14 @@
                 try {
                     lastDirectoryHandle = await window.showDirectoryPicker();
                     updateFilePathDisplay();
-                    alert('Working directory set to: ' + lastDirectoryHandle.name);
+                    showStatus('Working directory set to: ' + lastDirectoryHandle.name, 'success');
                 } catch (error) {
                     if (error.name !== 'AbortError') {
-                        alert('Error setting working directory: ' + error.message);
+                        showStatus('Error setting working directory: ' + error.message, 'error');
                     }
                 }
             } else {
-                alert('Your browser doesn\'t support directory selection.');
+                showStatus('Your browser doesn\'t support directory selection.', 'error');
             }
         }
 
