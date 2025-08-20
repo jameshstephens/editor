@@ -551,11 +551,29 @@
             const inputValue = input.value || '';
             console.log('Input value length:', inputValue.length); // Debug log
             
-            // Convert markdown to HTML using marked
+            // Convert markdown to HTML using marked with line tracking
             if (typeof marked !== 'undefined') {
-                const html = marked.parse(inputValue);
-                preview.innerHTML = html;
-                console.log('HTML generated, length:', html.length); // Debug log
+                const lines = inputValue.split('\n');
+                let htmlWithMarkers = '';
+                
+                for (let i = 0; i < lines.length; i++) {
+                    // Add an invisible marker for each line
+                    htmlWithMarkers += `<div data-source-line="${i}" style="position: absolute; visibility: hidden;"></div>`;
+                    
+                    // Process the line (or group of lines for block elements)
+                    const line = lines[i];
+                    if (line.trim() !== '') {
+                        // Render individual line to maintain line tracking
+                        const lineHtml = marked.parse(line);
+                        htmlWithMarkers += lineHtml;
+                    } else {
+                        // Empty line - add a small break
+                        htmlWithMarkers += '<br>';
+                    }
+                }
+                
+                preview.innerHTML = htmlWithMarkers;
+                console.log('HTML with line markers generated'); // Debug log
                 
                 // Render math with KaTeX if available
                 if (typeof renderMathInElement !== 'undefined') {
@@ -582,18 +600,20 @@
             
             if (!input || !preview) return;
             
-            // Get cursor position
-            const cursorPos = input.selectionStart;
-            const textBeforeCursor = input.value.substring(0, cursorPos);
-            const linesBeforeCursor = textBeforeCursor.split('\n').length - 1;
+            // Get the current scroll position of the editor
+            const editorScrollTop = input.scrollTop;
+            const editorScrollHeight = input.scrollHeight;
+            const editorClientHeight = input.clientHeight;
             
-            // Calculate scroll percentage based on cursor position
-            const totalLines = input.value.split('\n').length;
-            const scrollPercent = totalLines > 0 ? linesBeforeCursor / totalLines : 0;
+            // Calculate scroll percentage of editor
+            const maxEditorScroll = editorScrollHeight - editorClientHeight;
+            const editorScrollPercent = maxEditorScroll > 0 ? editorScrollTop / maxEditorScroll : 0;
             
-            // Scroll preview to corresponding position
-            const scrollTop = scrollPercent * (preview.scrollHeight - preview.clientHeight);
-            preview.scrollTop = Math.max(0, scrollTop);
+            // Apply same scroll percentage to preview
+            const maxPreviewScroll = preview.scrollHeight - preview.clientHeight;
+            const targetPreviewScroll = editorScrollPercent * maxPreviewScroll;
+            
+            preview.scrollTop = Math.max(0, Math.min(targetPreviewScroll, maxPreviewScroll));
         }
 
         // Check selected text functionality
