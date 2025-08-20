@@ -40,6 +40,7 @@
             gap: 1px;
             padding: 0;
             height: calc(100vh - 50px);
+            position: relative;
         }
         .feedback-panel, .editor-panel, .preview-panel {
             background: white;
@@ -47,15 +48,37 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            position: relative;
+        }
+        .panel-hidden {
+            display: none !important;
         }
         .feedback-panel {
             flex: 0 0 300px;
+            min-width: 200px;
         }
         .editor-panel {
             flex: 1;
+            min-width: 200px;
         }
         .preview-panel {
             flex: 1;
+            min-width: 200px;
+        }
+        
+        /* Resizer handles */
+        .resizer {
+            width: 5px;
+            background: #ccc;
+            cursor: col-resize;
+            position: relative;
+            flex-shrink: 0;
+        }
+        .resizer:hover {
+            background: #999;
+        }
+        .resizer:active {
+            background: #666;
         }
         .panel-header {
             padding: 6px 8px;
@@ -291,6 +314,11 @@
         
         <button onclick="setWorkingDirectory()" title="Set folder for Open and Save As operations">Set Working Directory</button>
         
+        <label>Panels:</label>
+        <button id="toggleFeedback" onclick="togglePanel('feedback')" title="Toggle AI Feedback panel">AI Feedback</button>
+        <button id="toggleEditor" onclick="togglePanel('editor')" title="Toggle Editor panel">Editor</button>
+        <button id="togglePreview" onclick="togglePanel('preview')" title="Toggle Preview panel">Preview</button>
+        
         <div class="file-path-display" id="filePathDisplay">
             No working directory or file set
         </div>
@@ -300,7 +328,7 @@
     <!-- Main Layout -->
     <div class="main-container">
         <!-- Left: AI Feedback Panel -->
-        <div class="feedback-panel">
+        <div class="feedback-panel" id="feedbackPanel">
             <div class="panel-header">AI Feedback</div>
             <div class="panel-content">
                 <div class="editor-toolbar">
@@ -313,8 +341,11 @@
             </div>
         </div>
 
+        <!-- Resizer between feedback and editor -->
+        <div class="resizer" id="feedbackResizer"></div>
+
         <!-- Middle: Editor Panel -->
-        <div class="editor-panel">
+        <div class="editor-panel" id="editorPanel">
             <div class="panel-header">Markdown Editor</div>
             
             <div class="file-controls">
@@ -329,8 +360,11 @@
             <textarea id="markdownInput" placeholder="Start typing your markdown here..."></textarea>
         </div>
 
+        <!-- Resizer between editor and preview -->
+        <div class="resizer" id="editorResizer"></div>
+
         <!-- Right: Preview Panel -->
-        <div class="preview-panel">
+        <div class="preview-panel" id="previewPanel">
             <div class="panel-header">Preview</div>
             <div class="panel-content" id="markdownPreview"></div>
         </div>
@@ -342,6 +376,15 @@
         let isLinkedToFile = false;
         let currentFilePath = null;
         let lastDirectoryHandle = null;
+        
+        // Panel management variables
+        let panelStates = {
+            feedback: true,
+            editor: true,
+            preview: true
+        };
+        let isResizing = false;
+        let currentResizer = null;
         
         function showStatus(message, type = 'info') {
             const statusDiv = document.getElementById('statusMessage');
@@ -533,6 +576,9 @@
             // Initialize file path display and preview
             updateFilePathDisplay();
             updatePreview();
+            
+            // Initialize panel controls
+            initializePanelControls();
         });
 
         // Real-time markdown preview with math support
@@ -975,6 +1021,157 @@
             isLinkedToFile = false;
             currentFilePath = null;
             updateFilePathDisplay();
+        }
+
+        // Panel visibility and resizing functions
+        function togglePanel(panelType) {
+            const panelElement = document.getElementById(panelType + 'Panel');
+            const button = document.getElementById('toggle' + panelType.charAt(0).toUpperCase() + panelType.slice(1));
+            
+            panelStates[panelType] = !panelStates[panelType];
+            
+            if (panelStates[panelType]) {
+                panelElement.classList.remove('panel-hidden');
+                button.style.backgroundColor = 'white';
+                button.style.color = '#333';
+            } else {
+                panelElement.classList.add('panel-hidden');
+                button.style.backgroundColor = '#f5f5f5';
+                button.style.color = '#999';
+            }
+            
+            // Hide/show resizers based on adjacent panels
+            updateResizerVisibility();
+            
+            // Update panel widths for single panel case
+            updatePanelWidths();
+        }
+        
+        function updateResizerVisibility() {
+            const feedbackResizer = document.getElementById('feedbackResizer');
+            const editorResizer = document.getElementById('editorResizer');
+            
+            // Show feedback resizer only if both feedback and editor panels are visible
+            if (panelStates.feedback && panelStates.editor) {
+                feedbackResizer.style.display = 'block';
+            } else {
+                feedbackResizer.style.display = 'none';
+            }
+            
+            // Show editor resizer only if both editor and preview panels are visible
+            if (panelStates.editor && panelStates.preview) {
+                editorResizer.style.display = 'block';
+            } else {
+                editorResizer.style.display = 'none';
+            }
+        }
+        
+        function initializePanelControls() {
+            // Initialize resizer functionality
+            const resizers = document.querySelectorAll('.resizer');
+            
+            resizers.forEach(resizer => {
+                resizer.addEventListener('mousedown', initResize);
+            });
+            
+            document.addEventListener('mousemove', doResize);
+            document.addEventListener('mouseup', stopResize);
+            
+            // Update initial button states
+            updateButtonStates();
+        }
+        
+        function updateButtonStates() {
+            Object.keys(panelStates).forEach(panelType => {
+                const button = document.getElementById('toggle' + panelType.charAt(0).toUpperCase() + panelType.slice(1));
+                if (panelStates[panelType]) {
+                    button.style.backgroundColor = 'white';
+                    button.style.color = '#333';
+                } else {
+                    button.style.backgroundColor = '#f5f5f5';
+                    button.style.color = '#999';
+                }
+            });
+        }
+        
+        function initResize(e) {
+            e.preventDefault();
+            isResizing = true;
+            currentResizer = e.target;
+            document.body.style.cursor = 'col-resize';
+        }
+        
+        function doResize(e) {
+            if (!isResizing || !currentResizer) return;
+            
+            e.preventDefault();
+            
+            const container = document.querySelector('.main-container');
+            const containerRect = container.getBoundingClientRect();
+            const mouseX = e.clientX - containerRect.left;
+            
+            if (currentResizer.id === 'feedbackResizer') {
+                // Resize feedback panel
+                const feedbackPanel = document.getElementById('feedbackPanel');
+                const newWidth = Math.max(200, Math.min(mouseX - 5, containerRect.width * 0.6));
+                feedbackPanel.style.flex = `0 0 ${newWidth}px`;
+            } else if (currentResizer.id === 'editorResizer') {
+                // Resize editor panel (affects both editor and preview)
+                const feedbackPanel = document.getElementById('feedbackPanel');
+                const feedbackWidth = panelStates.feedback ? feedbackPanel.getBoundingClientRect().width : 0;
+                const feedbackResizerWidth = panelStates.feedback && panelStates.editor ? 5 : 0;
+                const editorResizerWidth = 5;
+                
+                const availableWidth = containerRect.width - feedbackWidth - feedbackResizerWidth - editorResizerWidth;
+                const editorWidth = Math.max(200, Math.min(mouseX - feedbackWidth - feedbackResizerWidth - editorResizerWidth, availableWidth * 0.8));
+                
+                const editorPanel = document.getElementById('editorPanel');
+                const previewPanel = document.getElementById('previewPanel');
+                
+                editorPanel.style.flex = `0 0 ${editorWidth}px`;
+                previewPanel.style.flex = '1';
+            }
+        }
+        
+        function stopResize() {
+            isResizing = false;
+            currentResizer = null;
+            document.body.style.cursor = 'default';
+        }
+        
+        function updatePanelWidths() {
+            const feedbackPanel = document.getElementById('feedbackPanel');
+            const editorPanel = document.getElementById('editorPanel');
+            const previewPanel = document.getElementById('previewPanel');
+            
+            const visiblePanels = Object.values(panelStates).filter(state => state).length;
+            
+            // Reset to default flex values first
+            feedbackPanel.style.flex = '';
+            editorPanel.style.flex = '';
+            previewPanel.style.flex = '';
+            
+            if (visiblePanels === 1) {
+                // Single panel should take full width
+                if (panelStates.feedback) {
+                    feedbackPanel.style.flex = '1';
+                } else if (panelStates.editor) {
+                    editorPanel.style.flex = '1';
+                } else if (panelStates.preview) {
+                    previewPanel.style.flex = '1';
+                }
+            } else {
+                // Multiple panels - use default sizing
+                if (panelStates.feedback) {
+                    feedbackPanel.style.flex = '0 0 300px';
+                }
+                if (panelStates.editor) {
+                    editorPanel.style.flex = '1';
+                }
+                if (panelStates.preview) {
+                    previewPanel.style.flex = '1';
+                }
+            }
         }
 
     </script>
