@@ -523,6 +523,11 @@
                     console.log('Input detected, updating preview'); // Debug log
                     updatePreview();
                 });
+                
+                // Synchronized scrolling on click
+                markdownInput.addEventListener('click', function() {
+                    syncPreviewToCursor();
+                });
             }
             
             // Initialize file path display and preview
@@ -568,6 +573,27 @@
                 console.log('marked library not available');
                 preview.innerHTML = '<p>Loading markdown processor...</p>';
             }
+        }
+
+        // Synchronized scrolling function
+        function syncPreviewToCursor() {
+            const input = document.getElementById('markdownInput');
+            const preview = document.getElementById('markdownPreview');
+            
+            if (!input || !preview) return;
+            
+            // Get cursor position
+            const cursorPos = input.selectionStart;
+            const textBeforeCursor = input.value.substring(0, cursorPos);
+            const linesBeforeCursor = textBeforeCursor.split('\n').length - 1;
+            
+            // Calculate scroll percentage based on cursor position
+            const totalLines = input.value.split('\n').length;
+            const scrollPercent = totalLines > 0 ? linesBeforeCursor / totalLines : 0;
+            
+            // Scroll preview to corresponding position
+            const scrollTop = scrollPercent * (preview.scrollHeight - preview.clientHeight);
+            preview.scrollTop = Math.max(0, scrollTop);
         }
 
         // Check selected text functionality
