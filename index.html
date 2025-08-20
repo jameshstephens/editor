@@ -154,7 +154,7 @@
             font-family: monospace;
             line-height: 1.4;
             border: none;
-            padding: 4px;
+            padding: 4px 4px 500px 4px;
             font-size: 12px;
         }
         #markdownInput:focus {
@@ -304,6 +304,20 @@
             background-color: #f8f0f0;
         }
         
+        /* Fullscreen mode styles */
+        html:fullscreen, html:-webkit-full-screen, html:-moz-full-screen {
+            background: white;
+        }
+        
+        body:fullscreen, body:-webkit-full-screen, body:-moz-full-screen {
+            background: white;
+        }
+        
+        #fullscreenBtn {
+            font-size: 14px;
+            padding: 4px 8px;
+        }
+        
     </style>
 </head>
 <body>
@@ -322,6 +336,8 @@
         <div class="file-path-display" id="filePathDisplay">
             No working directory or file set
         </div>
+        
+        <button id="fullscreenBtn" onclick="toggleFullscreen()" title="Toggle fullscreen mode" style="margin-left: auto;">⛶</button>
         <div id="statusMessage" style="font-size: 10px; color: #666; font-family: monospace; display: none;"></div>
     </div>
 
@@ -1173,6 +1189,31 @@
                 }
             }
         }
+
+        // Fullscreen functionality
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.error('Error attempting to enable fullscreen:', err);
+                });
+            } else {
+                document.exitFullscreen().catch(err => {
+                    console.error('Error attempting to exit fullscreen:', err);
+                });
+            }
+        }
+
+        // Update fullscreen button text when fullscreen state changes
+        document.addEventListener('fullscreenchange', function() {
+            const fullscreenBtn = document.getElementById('fullscreenBtn');
+            if (document.fullscreenElement) {
+                fullscreenBtn.textContent = '⛶';
+                fullscreenBtn.title = 'Exit fullscreen mode';
+            } else {
+                fullscreenBtn.textContent = '⛶';
+                fullscreenBtn.title = 'Enter fullscreen mode';
+            }
+        });
 
     </script>
 </body>
