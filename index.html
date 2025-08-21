@@ -316,6 +316,14 @@
         #fullscreenBtn {
             font-size: 14px;
             padding: 4px 8px;
+            flex-shrink: 0;
+        }
+        
+        #statusMessage {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         
     </style>
@@ -324,31 +332,33 @@
     <!-- Top Settings Bar -->
     <div class="top-bar">
         <label>API Key:</label>
-        <input type="password" id="apiKey" placeholder="Enter your OpenAI API key" style="width: 300px;">
+        <input type="password" id="apiKey" placeholder="Enter your OpenAI API key" style="width: 200px;">
         
         <button onclick="setWorkingDirectory()" title="Set folder for Open and Save As operations">Set Working Directory</button>
         
         <label>Panels:</label>
-        <button id="toggleFeedback" onclick="togglePanel('feedback')" title="Toggle AI Feedback panel">AI Feedback</button>
+        <button id="toggleFeedback" onclick="togglePanel('feedback')" title="Toggle AI Feedback panel">AI</button>
         <button id="toggleEditor" onclick="togglePanel('editor')" title="Toggle Editor panel">Editor</button>
         <button id="togglePreview" onclick="togglePanel('preview')" title="Toggle Preview panel">Preview</button>
         
-        <div class="file-path-display" id="filePathDisplay">
-            No working directory or file set
-        </div>
+        <label>Autosave:</label>
+        <input type="checkbox" id="autosaveEnabled" checked onchange="toggleAutosave()" title="Enable/disable autosave">
+        <input type="number" id="autosaveSeconds" value="30" min="1" max="300" style="width: 50px;">
+        <label>sec</label>
+        <button onclick="updateAutosaveInterval()" title="Update autosave interval">Set</button>
         
-        <button id="fullscreenBtn" onclick="toggleFullscreen()" title="Toggle fullscreen mode" style="margin-left: auto;">⛶</button>
         <div id="statusMessage" style="font-size: 10px; color: #666; font-family: monospace; display: none;"></div>
+        <button id="fullscreenBtn" onclick="toggleFullscreen()" title="Toggle fullscreen mode" style="margin-left: auto;">⛶</button>
     </div>
 
     <!-- Main Layout -->
     <div class="main-container">
         <!-- Left: AI Feedback Panel -->
         <div class="feedback-panel" id="feedbackPanel">
-            <div class="panel-header">AI Feedback</div>
+            <div class="panel-header">AI</div>
             <div class="panel-content">
                 <div class="editor-toolbar">
-                    <button id="checkButton" onclick="checkSelection()" title="Check selected text with AI">Check This</button>
+                    <button id="checkButton" onclick="checkSelection()" title="Check selected text with AI">Check Text</button>
                     <span style="margin-left: 10px; font-size: 12px; color: #666;">Select text for AI feedback</span>
                 </div>
                 
@@ -362,7 +372,10 @@
 
         <!-- Middle: Editor Panel -->
         <div class="editor-panel" id="editorPanel">
-            <div class="panel-header">Markdown Editor</div>
+            <div class="panel-header">
+                Editor
+                <span class="file-path-display" id="filePathDisplay" style="margin-left: 10px; font-size: 10px; color: #666;"></span>
+            </div>
             
             <div class="file-controls">
                 <input type="file" id="fileInput" accept=".md,.txt" style="display: none;" onchange="handleFileInputChange()">
@@ -392,6 +405,9 @@
         let isLinkedToFile = false;
         let currentFilePath = null;
         let lastDirectoryHandle = null;
+        let autosaveInterval = null;
+        let autosaveIntervalSeconds = 30; // Default 30 seconds
+        let autosaveEnabled = true; // Default autosave on
         
         // Panel management variables
         let panelStates = {
@@ -575,6 +591,14 @@
                 });
             }
             
+            // Add global Ctrl+S keyboard shortcut for saving
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 's' && e.ctrlKey) {
+                    e.preventDefault(); // Prevent browser's default save dialog
+                    saveFile();
+                }
+            });
+            
             // Auto-update preview on input
             const markdownInput = document.getElementById('markdownInput');
             if (markdownInput) {
@@ -595,6 +619,9 @@
             
             // Initialize panel controls
             initializePanelControls();
+            
+            // Start autosave timer
+            startAutosave();
         });
 
         // Real-time markdown preview with math support
@@ -1005,12 +1032,13 @@
             } else if (isLinkedToFile && currentFileHandle) {
                 if (displayText) displayText += ' | ';
                 displayText += 'File: ' + currentFileHandle.name;
-            } else {
-                if (displayText) displayText += ' | ';
-                displayText += 'No file loaded';
             }
             
-            pathDisplay.textContent = displayText || 'No working directory or file set';
+            if (displayText) {
+                pathDisplay.textContent = displayText;
+            } else {
+                pathDisplay.textContent = 'No working directory set';
+            }
         }
 
         async function setWorkingDirectory() {
@@ -1037,6 +1065,89 @@
             isLinkedToFile = false;
             currentFilePath = null;
             updateFilePathDisplay();
+        }
+
+        // Autosave functionality
+        function startAutosave() {
+            // Clear any existing autosave timer
+            if (autosaveInterval) {
+                clearInterval(autosaveInterval);
+            }
+            
+            // Only start autosave if it's enabled
+            if (autosaveEnabled) {
+                // Set up autosave using the configured interval
+                autosaveInterval = setInterval(() => {
+                    autosaveFile();
+                }, autosaveIntervalSeconds * 1000);
+            }
+        }
+
+        async function autosaveFile() {
+            // Only autosave if we have a file handle (file was previously opened or saved)
+            if (!currentFileHandle || !isLinkedToFile) {
+                return;
+            }
+            
+            const content = document.getElementById('markdownInput').value;
+            
+            try {
+                // Check if we still have permission to write to the file
+                const permission = await currentFileHandle.queryPermission({ mode: 'readwrite' });
+                if (permission === 'denied') {
+                    const newPermission = await currentFileHandle.requestPermission({ mode: 'readwrite' });
+                    if (newPermission === 'denied') {
+                        showStatus('Autosave failed: Permission denied', 'error');
+                        return;
+                    }
+                }
+                
+                const writable = await currentFileHandle.createWritable();
+                await writable.write(content);
+                await writable.close();
+                showStatus('Autosaved', 'success');
+            } catch (error) {
+                showStatus('Autosave failed: ' + error.message, 'error');
+            }
+        }
+
+        // Function to toggle autosave on/off
+        function toggleAutosave() {
+            const checkbox = document.getElementById('autosaveEnabled');
+            const intervalInput = document.getElementById('autosaveSeconds');
+            
+            autosaveEnabled = checkbox.checked;
+            
+            // Enable/disable the interval input and set button
+            intervalInput.disabled = !autosaveEnabled;
+            
+            // Restart autosave (will start or stop based on enabled state)
+            startAutosave();
+            
+            if (autosaveEnabled) {
+                showStatus('Autosave enabled', 'success');
+            } else {
+                showStatus('Autosave disabled', 'success');
+            }
+        }
+
+        // Function to update autosave interval
+        function updateAutosaveInterval() {
+            const input = document.getElementById('autosaveSeconds');
+            const newInterval = parseInt(input.value);
+            
+            if (isNaN(newInterval) || newInterval < 1 || newInterval > 300) {
+                showStatus('Please enter a valid interval between 1-300 seconds', 'error');
+                input.value = autosaveIntervalSeconds; // Reset to current value
+                return;
+            }
+            
+            autosaveIntervalSeconds = newInterval;
+            
+            // Restart the autosave timer with new interval (if enabled)
+            startAutosave();
+            
+            showStatus(`Autosave interval set to ${newInterval} seconds`, 'success');
         }
 
         // Panel visibility and resizing functions
